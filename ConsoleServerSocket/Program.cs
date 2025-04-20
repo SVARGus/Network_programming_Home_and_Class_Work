@@ -14,10 +14,10 @@ using static System.Console;
 	Клиент: В 10:26 от [IP-адрес] получена строка: Привет, клиент! 
     Используйте механизм синхронных сокетов
 
-Реализация клиентской части
+Реализация серверной части
 */
 
-namespace ConsoleConnectSocket
+namespace ConsoleServerSocket
 {
     class Program
     {
@@ -27,26 +27,30 @@ namespace ConsoleConnectSocket
             string serverIP = "127.0.0.1";
             IPAddress ip = IPAddress.Parse(serverIP);
             IPEndPoint ep = new IPEndPoint(ip, port);
-            Socket sender = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
+            Socket listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
+
+            listener.Bind(ep);
+            listener.Listen(1);
+            WriteLine("Ожидание подключения клиента");
 
             try
             {
-                sender.Connect(ep);
-                if (sender.Connected)
+                while (true)
                 {
-                    string message = "Привет, Сервер!";
-                    sender.Send(Encoding.UTF8.GetBytes(message));
+                    Socket handler = listener.Accept();
 
                     byte[] buffer = new byte[4096];
-                    int bytesRec = sender.Receive(buffer);
+                    int bytesRec = handler.Receive(buffer);
                     string data = Encoding.UTF8.GetString(buffer, 0, bytesRec);
 
-                    string serverIPAddress = ((IPEndPoint)sender.RemoteEndPoint).Address.ToString();
-                    WriteLine($"Клиент: в {DateTime.Now:HH:mm} от {serverIPAddress} получена строка: {data}");
-                }
-                else
-                {
-                    WriteLine("Error");
+                    string clientIPAdress = ((IPEndPoint)handler.RemoteEndPoint).Address.ToString();
+                    WriteLine($"Сервер: в {DateTime.Now:HH:mm} от {clientIPAdress} получена строка: {data}");
+
+                    string reply = "Привет, клиент!";
+                    byte[] message = Encoding.UTF8.GetBytes(reply);
+                    handler.Send(message);
+                    handler.Shutdown(SocketShutdown.Both);
+                    handler.Close();
                 }
             }
             catch (SocketException ex)
@@ -57,19 +61,6 @@ namespace ConsoleConnectSocket
             {
                 WriteLine($"Общая ошибка: {ex.Message}");
             }
-            finally
-            {
-                if (sender != null )
-                {
-                    if (sender.Connected)
-                    {
-                        sender.Shutdown(SocketShutdown.Both);
-                    }
-                    sender.Close();
-                    sender.Dispose();
-                }                
-            }
-            Read();
         }
     }
 }
