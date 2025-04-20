@@ -51,13 +51,25 @@ namespace ConsoleConnectSocket
             }
             catch (SocketException ex)
             {
-                WriteLine(ex.Message);
+                WriteLine($"Ошибка сокета: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Общая ошибка: {ex.Message}");
             }
             finally
             {
-                sender.Shutdown(SocketShutdown.Both);
-                sender.Close();
+                if (sender != null )
+                {
+                    if (sender.Connected)
+                    {
+                        sender.Shutdown(SocketShutdown.Both);
+                    }
+                    sender.Close();
+                    sender.Dispose();
+                }                
             }
+            Read();
         }
     }
 }
