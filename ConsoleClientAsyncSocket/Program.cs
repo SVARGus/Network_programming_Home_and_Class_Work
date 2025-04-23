@@ -24,14 +24,11 @@ namespace ConsoleClientAsyncSocket
     {
         private byte[] buffer = new byte[1024];
         private Socket client;
-        private string serverIP;
-        private int port;
         private IPEndPoint endP;
+
 
         public ClientAsync(string serverIP, int port)
         {
-            this.serverIP = serverIP;
-            this.port = port;
             endP = new IPEndPoint(IPAddress.Parse(serverIP), port);
             client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
         }
@@ -66,10 +63,12 @@ namespace ConsoleClientAsyncSocket
             catch (SocketException ex)
             {
                 WriteLine($"Ошибка сокета: {ex.Message}");
+                client.Close();
             }
             catch (Exception ex)
             {
                 WriteLine($"Общая ошибка: {ex.Message}");
+                client.Close();
             }
         }
 
@@ -78,17 +77,19 @@ namespace ConsoleClientAsyncSocket
             try
             {
                 int byteSent = client.EndSend(ar);
-                WriteLine($"Отправлено {byteSent} байт. Локальное время: {DateTime.Now::HH:mm:ss}, ожидаю ответ...");
+                WriteLine($"Отправлено {byteSent} байт. Локальное время: {DateTime.Now:HH:mm:ss}, ожидаю ответ...");
 
                 client.BeginReceive(buffer, 0, buffer.Length, 0, ReceiveCallback, null);
             }
             catch (SocketException ex)
             {
                 WriteLine($"Ошибка сокета: {ex.Message}");
+                client.Close();
             }
             catch (Exception ex)
             {
                 WriteLine($"Общая ошибка: {ex.Message}");
+                client.Close();
             }
         }
 
@@ -97,8 +98,16 @@ namespace ConsoleClientAsyncSocket
             try
             {
                 int bytesRec = client.EndReceive(ar);
-                string resp = Encoding.UTF8.GetString(buffer, 0, bytesRec);
-                WriteLine($"Получено от сервера: {resp}. Локальное время: {DateTime.Now::HH:mm:ss}");
+
+                if (bytesRec > 0)
+                {
+                    string resp = Encoding.UTF8.GetString(buffer, 0, bytesRec);
+                    WriteLine($"Получено от сервера: {resp}. Локальное время: {DateTime.Now:HH:mm:ss.fff}");
+                }
+                else
+                {
+                    WriteLine("Сервер закрыл соединение");
+                }
             }
             catch (SocketException ex)
             {
@@ -108,9 +117,11 @@ namespace ConsoleClientAsyncSocket
             {
                 WriteLine($"Общая ошибка: {ex.Message}");
             }
-            
-            client.Shutdown(SocketShutdown.Both);
-            client.Close();
+            finally
+            {
+                client.Shutdown(SocketShutdown.Both);
+                client.Close();
+            }
         }
     }
 
@@ -118,13 +129,19 @@ namespace ConsoleClientAsyncSocket
     {
         static void Main(string[] args)
         {
-            WriteLine("Введите \"date\" или \"time\": ");
-            string cmd = Console.ReadLine().Trim().ToLower();
+            while (true)
+            {
+                WriteLine("Введите \"date\" или \"time\" (или \"exit\" для выхода): ");
+                string cmd = ReadLine().Trim().ToLower();
 
-            ClientAsync client = new ClientAsync("127.0.0.1", 1024);
-            client.StartClient(cmd);
+                if (cmd == "exit")
+                    break;
 
-            ReadLine();
+                ClientAsync client = new ClientAsync("127.0.0.1", 1024);
+                client.StartClient(cmd);
+
+                System.Threading.Thread.Sleep(500);
+            }
         }
     }
 }
