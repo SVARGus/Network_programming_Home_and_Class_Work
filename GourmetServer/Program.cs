@@ -28,13 +28,38 @@ namespace GourmetServer
 
             Log("Нажмите любую клавишу для завершения...");
             ReadKey();
+            SaveUserId();
         }
 
         private static void LoadRecipes(string fileName = "recipes.json")
         {
             try
             {
-                if(!File.Exists(fileName))
+                if (!File.Exists("serveruserid.txt"))
+                {
+                    Log($"Файл \"serveruserid.txt\" не найден. Будет создан новый при первом сохранении.");
+                    return;
+                }
+
+                string content = File.ReadAllText("serveruserid.txt");
+                if (int.TryParse(content, out int loadedId))
+                {
+                    lastUserId = loadedId;
+                    Log($"Загружен последний UserId: {lastUserId}");
+                }
+                else
+                {
+                    Log($"Неверный формат в файле \"serveruserid.txt\": \"{content}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка загрузки lastUserId: {ex.Message}");
+            }
+
+            try
+            {
+                if (!File.Exists(fileName))
                 {
                     Log($"Файл {fileName} не найден");
                     return;
@@ -185,6 +210,11 @@ namespace GourmetServer
             string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}";
             File.AppendAllText("server.log", logEntry + Environment.NewLine);
             WriteLine(logEntry);
+        }
+
+        private static void SaveUserId()
+        {
+            File.WriteAllText("serveruserid.txt", lastUserId.ToString());
         }
     }
 }
