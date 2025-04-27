@@ -69,7 +69,9 @@ namespace GourmetClient
 
                 stream = client.GetStream();
 
-                byte[] buffer = Encoding.Unicode.GetBytes(query);
+                var request = new ClientRequest { IdUser = userId, Quary =  query };
+                string jsonRequest = JsonConvert.SerializeObject(request);
+                byte[] buffer = Encoding.Unicode.GetBytes(jsonRequest);
                 await stream.WriteAsync(buffer, 0, buffer.Length);
 
                 await ReceiveResponseAsync();
@@ -108,7 +110,8 @@ namespace GourmetClient
                     }
                     while (stream.DataAvailable);
 
-                    string response = Encoding.Unicode.GetString(ms.ToArray());
+                    string responseJson = Encoding.Unicode.GetString(ms.ToArray());
+                    var response = JsonConvert.DeserializeObject<ServerResponse>(responseJson);
 
                     ProcessServerResponse(response);
                 }
@@ -123,20 +126,30 @@ namespace GourmetClient
             }
         }
 
-        private void ProcessServerResponse(string response)
+        private void ProcessServerResponse(ServerResponse response)
         {
             try
             {
+                if (response.Error != null)
+                {
+                    MessageBox.Show(response.Error,
+                        "Сообщение от сервера",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                if (response.IdUser != userId)
+                {
+                    userId = response.IdUser;
+                    SaveUserId();
+                }
+
                 Recipes.Clear();
 
-                if (!string.IsNullOrWhiteSpace(response))
+                if (response.Recipes != null)
                 {
-                    var recipesFromServer = JsonConvert.DeserializeObject<List<Recipe>>(response);
-
-                    if (recipesFromServer != null)
-                    {
-                        Recipes.AddRange(recipesFromServer);
-                    }
+                    Recipes.AddRange(response.Recipes);
                 }
 
                 Dispatcher.Invoke(() =>
