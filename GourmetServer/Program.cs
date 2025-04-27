@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,14 +16,17 @@ namespace GourmetServer
     class Program
     {
         static List<Recipe> allRecipes = new List<Recipe>();
+        static ConcurrentDictionary<int, List<RequestData>> clientRequests = new ConcurrentDictionary<int, List<RequestData>>();
+        static int lastUserId = 0;
+        static object idLock = new object();
         static void Main(string[] args)
         {
-            WriteLine("Запуск сервера...");
+            Log("Запуск сервера...");
 
             LoadRecipes();
             StartServer();
 
-            WriteLine("Нажмите любую клавишу для завершения...");
+            Log("Нажмите любую клавишу для завершения...");
             ReadKey();
         }
 
@@ -32,18 +36,18 @@ namespace GourmetServer
             {
                 if(!File.Exists(fileName))
                 {
-                    WriteLine($"Файл {fileName} не найден");
+                    Log($"Файл {fileName} не найден");
                     return;
                 }
 
                 string json = File.ReadAllText(fileName);
                 allRecipes = JsonConvert.DeserializeObject<List<Recipe>>(json);
 
-                WriteLine($"Загружено рецептов: {allRecipes.Count}");
+                Log($"Загружено рецептов: {allRecipes.Count}");
             }
             catch (Exception ex)
             {
-                WriteLine($"Ошибка загрузки рецептов: {ex.Message}");
+                Log($"Ошибка загрузки рецептов: {ex.Message}");
             }
         }
 
@@ -59,19 +63,19 @@ namespace GourmetServer
                 listener = new TcpListener(localAdress, port);
                 listener.Start();
 
-                WriteLine($"Сервер запущен на {localAdress}:{port}");
+                Log($"Сервер запущен на {localAdress}:{port}");
 
                 while (true)
                 {
                     TcpClient client = listener.AcceptTcpClient();
-                    WriteLine("Клиент подключился.");
+                    Log("Клиент подключился.");
 
                     Task.Run(() => HandleClient(client));
                 }
             }
             catch (Exception ex)
             {
-                WriteLine($"Error server: {ex.Message}");
+                Log($"Error server: {ex.Message}");
             }
             finally
             {
@@ -88,27 +92,75 @@ namespace GourmetServer
                     byte[] buffer = new byte[4096];
                     int bytesRead = stream.Read(buffer, 0, buffer.Length);
 
-                    string request = Encoding.Unicode.GetString(buffer, 0, bytesRead);
-                    WriteLine($"Запрос от клиента: {request}");
+                    string requestJson = Encoding.Unicode.GetString(buffer, 0, bytesRead);
+                    var request = JsonConvert.DeserializeObject<ClientRequest>(requestJson);
+                    Log($"От клиента #{request.IdUser} поступил запрос: {request.Quary}");
 
-                    List<Recipe> matchedRecipes = FindRecipes(request);
+                    ServerResponse response = ProcessRequest(request);
 
-                    string responseJson = JsonConvert.SerializeObject(matchedRecipes);
+                    string responseJson = JsonConvert.SerializeObject(response);
 
                     byte[] responseBytes = Encoding.Unicode.GetBytes(responseJson);
                     stream.Write(responseBytes, 0, responseBytes.Length);
 
-                    WriteLine("Ответ отправлен клиенту");
+                    Log($"Ответ отправлен клиенту #{response.IdUser}");
                 }
             }
             catch (Exception ex)
             {
-                WriteLine($"Error server: {ex.Message}");
+                Log($"Error server: {ex.Message}");
             }
             finally
             {
                 client?.Close();
-                WriteLine("Клиент отключился");
+                Log("Клиент отключился");
+            }
+        }
+
+        private static ServerResponse ProcessRequest(ClientRequest request)
+        {
+            try
+            {
+                int userId = request.IdUser;
+                bool isNewUser = false;
+
+                if (userId == 0)
+                {
+                    lock (idLock)
+                    {
+                        userId = ++lastUserId;
+                        isNewUser = true;
+                    }
+                }
+
+                if (!clientRequests.TryGetValue(userId, out var requests))
+                {
+                    requests = new List<RequestData>();
+                    clientRequests[userId] = requests;
+                }
+
+                requests.RemoveAll(r => DateTime.Now - r.RequestTime > TimeSpan.FromHours(1));
+
+                if (requests.Count >= 10)
+                {
+                    return new ServerResponse { IdUser = userId, Error = "Достигнут лимит запросов (10 в 1 час)" };
+                }
+
+                requests.Add(new RequestData { RequestTime = DateTime.Now, Query = request.Quary });
+
+                List<Recipe> recipes = FindRecipes(request.Quary);
+                if (isNewUser)
+                {
+                    Log($"Зарегестрирован новый пользователь: {userId}");
+                }
+
+                return new ServerResponse { IdUser = userId, Recipes = recipes };
+
+            }
+            catch (Exception ex)
+            {
+                Log(ex.Message);
+                return new ServerResponse { Error = ex.Message };
             }
         }
 
@@ -126,6 +178,13 @@ namespace GourmetServer
                 .ToList();
 
             return result;
+        }
+
+        private static void Log(string message)
+        {
+            string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}";
+            File.AppendAllText("server.log", logEntry + Environment.NewLine);
+            WriteLine(logEntry);
         }
     }
 }
