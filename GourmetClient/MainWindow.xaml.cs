@@ -32,12 +32,16 @@ namespace GourmetClient
         IPAddress adressIP = IPAddress.Parse("127.0.0.1");
         int port = 1025;
 
+        private int userId = 0;
+        private const string UserIdFile = "userid.txt";
+
         public List<Recipe> Recipes {  get; set; } = new List<Recipe>();
         public Recipe SelectedRecipe { get; set; }
 
         public MainWindow()
         {
             InitializeComponent();
+            LoadUserId();
             this.DataContext = this;
         }
 
@@ -163,6 +167,19 @@ namespace GourmetClient
             {
                 RecipePanel.DataContext = null;
             }
+        }
+
+        private void LoadUserId()
+        {
+            if(File.Exists(UserIdFile))
+            {
+                int.TryParse(File.ReadAllText(UserIdFile), out userId);
+            }
+        }
+
+        private void SaveUserId()
+        {
+            File.WriteAllText(UserIdFile, userId.ToString());
         }
     }
 }
