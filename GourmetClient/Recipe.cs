@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace GourmetRecipe
 {
@@ -15,5 +16,24 @@ namespace GourmetRecipe
         {
             Ingredients = new List<string>();
         }
+    }
+
+    public class ClientRequest
+    {
+        public int IdUser { get; set; }
+        public string Quary {  get; set; }
+    }
+
+    public class ServerResponse
+    {
+        public int IdUser { get; set; }
+        public List<Recipe> Recipes { get; set; }
+        public string Error { get; set; }
+    }
+
+    public class RequestData
+    {
+        public DateTime RequestTime { get; set; }
+        public string Query { get; set; }
     }
 }
