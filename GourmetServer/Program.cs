@@ -38,18 +38,19 @@ namespace GourmetServer
                 if (!File.Exists("serveruserid.txt"))
                 {
                     Log($"Файл \"serveruserid.txt\" не найден. Будет создан новый при первом сохранении.");
-                    return;
-                }
-
-                string content = File.ReadAllText("serveruserid.txt");
-                if (int.TryParse(content, out int loadedId))
-                {
-                    lastUserId = loadedId;
-                    Log($"Загружен последний UserId: {lastUserId}");
                 }
                 else
                 {
-                    Log($"Неверный формат в файле \"serveruserid.txt\": \"{content}\"");
+                    string content = File.ReadAllText("serveruserid.txt");
+                    if (int.TryParse(content, out int loadedId))
+                    {
+                        lastUserId = loadedId;
+                        Log($"Загружен последний UserId: {lastUserId}");
+                    }
+                    else
+                    {
+                        Log($"Неверный формат в файле \"serveruserid.txt\": \"{content}\"");
+                    }
                 }
             }
             catch (Exception ex)
@@ -62,13 +63,14 @@ namespace GourmetServer
                 if (!File.Exists(fileName))
                 {
                     Log($"Файл {fileName} не найден");
-                    return;
                 }
+                else
+                {
+                    string json = File.ReadAllText(fileName);
+                    allRecipes = JsonConvert.DeserializeObject<List<Recipe>>(json);
 
-                string json = File.ReadAllText(fileName);
-                allRecipes = JsonConvert.DeserializeObject<List<Recipe>>(json);
-
-                Log($"Загружено рецептов: {allRecipes.Count}");
+                    Log($"Загружено рецептов: {allRecipes.Count}");
+                }
             }
             catch (Exception ex)
             {
