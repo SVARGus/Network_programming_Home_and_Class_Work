@@ -130,15 +130,6 @@ namespace GourmetClient
         {
             try
             {
-                if (response.Error != null)
-                {
-                    MessageBox.Show(response.Error,
-                        "Сообщение от сервера",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                    return;
-                }
-
                 if (response.IdUser != userId)
                 {
                     userId = response.IdUser;
@@ -147,7 +138,15 @@ namespace GourmetClient
 
                 Recipes.Clear();
 
-                if (response.Recipes != null)
+                if (response.Error != null)
+                {
+                    MessageBox.Show(response.Error,
+                        "Сообщение от сервера",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+                else if (response.Recipes != null)
                 {
                     Recipes.AddRange(response.Recipes);
                 }

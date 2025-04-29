@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using GourmetRecipe;
 using Newtonsoft.Json;
@@ -17,47 +18,97 @@ namespace GourmetServer
     {
         static List<Recipe> allRecipes = new List<Recipe>();
         static ConcurrentDictionary<int, List<RequestData>> clientRequests = new ConcurrentDictionary<int, List<RequestData>>();
+        private const string RequestHistoryFile = "request_history.json";
         static int lastUserId = 0;
         static object idLock = new object();
+
+        static CancellationTokenSource cts = new CancellationTokenSource();
+        static TcpListener listener;
+
         static void Main(string[] args)
         {
             Log("Запуск сервера...");
 
+            LoadLastUserIdFromFile();
             LoadRecipes();
-            StartServer();
+            LoadRequestHistory();
 
-            Log("Нажмите любую клавишу для завершения...");
-            ReadKey();
-            SaveUserId();
+            Task.Run(() => StartServer(cts.Token));
+
+            Log("Введите 'exit' для завершения работы сервера.");
+
+            while(true)
+            {
+                string input = ReadLine();
+                if (input?.Trim().ToLower() == "exit")
+                {
+                    Log("Завершение работы сервера...");
+                    cts.Cancel();
+                    listener?.Stop();
+                    SaveRequestHistory();
+                    SaveLastUserIdFromFile();
+                    break;
+                }
+            }
         }
 
-        private static void LoadRecipes(string fileName = "recipes.json")
+        private static void LoadRequestHistory()
         {
             try
             {
-                if (!File.Exists("serveruserid.txt"))
+                if (File.Exists(RequestHistoryFile))
                 {
-                    Log($"Файл \"serveruserid.txt\" не найден. Будет создан новый при первом сохранении.");
+                    string json = File.ReadAllText(RequestHistoryFile);
+                    var loaded = JsonConvert.DeserializeObject<Dictionary<int, List<RequestData>>>(json);
+                    if (loaded != null)
+                    {
+                        foreach (var kvp in loaded)
+                        {
+                            clientRequests[kvp.Key] = kvp.Value;
+                        }
+                        Log($"Загружена история запросов: {loaded.Count} пользователей");
+                    }
                 }
                 else
                 {
-                    string content = File.ReadAllText("serveruserid.txt");
-                    if (int.TryParse(content, out int loadedId))
-                    {
-                        lastUserId = loadedId;
-                        Log($"Загружен последний UserId: {lastUserId}");
-                    }
-                    else
-                    {
-                        Log($"Неверный формат в файле \"serveruserid.txt\": \"{content}\"");
-                    }
+                    Log("Файл истории запросов не найден или первый запуск сервера.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка при загрузке истории запросов: {ex.Message}");
+            }
+        }
+
+        private static void LoadLastUserIdFromFile(string fileName = "serveruserid.txt")
+        {
+            try
+            {
+                if (!File.Exists(fileName))
+                {
+                    Log($"Файл \"{fileName}\" не найден. Будет создан новый при первом сохранении.");
+                    return;
+                }
+
+                string content = File.ReadAllText(fileName);
+                if (int.TryParse(content, out int loadedId))
+                {
+                    lastUserId = loadedId;
+                    Log($"Загружен последний UserId: {lastUserId}");
+                }
+                else
+                {
+                    Log($"Неверный формат в файле \"{fileName}\": \"{content}\"");
                 }
             }
             catch (Exception ex)
             {
                 Log($"Ошибка загрузки lastUserId: {ex.Message}");
             }
+        }
 
+        private static void LoadRecipes(string fileName = "recipes.json")
+        {
             try
             {
                 if (!File.Exists(fileName))
@@ -78,10 +129,8 @@ namespace GourmetServer
             }
         }
 
-        private static void StartServer()
+        private static void StartServer(CancellationToken token)
         {
-            TcpListener listener = null;
-
             try
             {
                 int port = 1025;
@@ -94,10 +143,18 @@ namespace GourmetServer
 
                 while (true)
                 {
-                    TcpClient client = listener.AcceptTcpClient();
-                    Log("Клиент подключился.");
+                    if (listener.Pending())
+                    {
+                        TcpClient client = listener.AcceptTcpClient();
+                        Log("Клиент подключился.");
 
-                    Task.Run(() => HandleClient(client));
+                        Task.Run(() => HandleClient(client));
+                    }
+                    else
+                    {
+                        Thread.Sleep(100);
+                    }
+
                 }
             }
             catch (Exception ex)
@@ -181,6 +238,11 @@ namespace GourmetServer
                     Log($"Зарегестрирован новый пользователь: {userId}");
                 }
 
+                if (recipes.Count == 0)
+                {
+                    return new ServerResponse { IdUser = userId, Recipes = new List<Recipe>(), Error = "По запросу не найдено ни одного рецепта" };
+                }
+
                 return new ServerResponse { IdUser = userId, Recipes = recipes };
 
             }
@@ -214,9 +276,27 @@ namespace GourmetServer
             WriteLine(logEntry);
         }
 
-        private static void SaveUserId()
+        private static void SaveLastUserIdFromFile()
         {
             File.WriteAllText("serveruserid.txt", lastUserId.ToString());
+        }
+
+        private static void SaveRequestHistory()
+        {
+            try
+            {
+                var serializableData = clientRequests.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value
+                );
+                string json = JsonConvert.SerializeObject(serializableData, Formatting.Indented);
+                File.WriteAllText(RequestHistoryFile, json);
+                Log("История запросов сохранена.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Ошибка при сохранении истории запросов: {ex.Message}");
+            }
         }
     }
 }

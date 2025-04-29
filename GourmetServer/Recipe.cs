@@ -36,4 +36,6 @@ namespace GourmetRecipe
         public DateTime RequestTime { get; set; }
         public string Query { get; set; }
     }
+
+
 }
